@@ -9,6 +9,7 @@
   var THEME_KEY = 'spinlab.theme';
   var MAX_TOTAL_GAMES = 2e10;
   var MAX_CHECKPOINT_VALUES = 2e7;
+  var GRID_STALE_DAYS = 183; /* grille officielle à revérifier au-delà (≈ 6 mois) */
 
   var state;
   var lastSim = null;
@@ -400,6 +401,11 @@
       var host = p.source.replace(/^https:\/\/(www\.)?/, '').split('/')[0];
       parts.push('Grille officielle : <a href="' + esc(p.source) + '" target="_blank" rel="noopener">' + esc(host) + '</a>' +
         (p.checked ? ', relevée le ' + p.checked.split('-').reverse().join('/') : ''));
+      /* les rooms changent leurs grilles sans préavis : au-delà de 6 mois, on invite à revérifier */
+      var age = p.checked ? (Date.now() - new Date(p.checked + 'T00:00:00').getTime()) / 864e5 : NaN;
+      if (age > GRID_STALE_DAYS) {
+        parts.push('<b>Relevée il y a plus de 6 mois</b> : la room a pu changer sa grille, revérifie sur la page source.');
+      }
     } else if (p && p.builtin) {
       parts.push('Grille non officielle.');
     }

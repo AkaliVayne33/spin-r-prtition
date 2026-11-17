@@ -35,5 +35,6 @@ Pour l'interface : ouvrir `index.html` et lancer une simulation. Avec Playwright
 ## Données
 
 - Les grilles officielles (Winamax, Unibet, PMU, Betclic) sont dans `js/presets.js`, avec leur `source` et leur date `checked`. Pour les mettre à jour, il faut les recopier depuis la page source. Chez PMU, les tableaux sont des images, qu'il faut ouvrir dans un navigateur pour les lire.
+- Au-delà de 6 mois après `checked` (`GRID_STALE_DAYS` dans `app.js`), l'interface invite à revérifier la grille. Après une nouvelle relève, mettre à jour `CHECKED` dans `presets.js`.
 - Le test « grilles officielles » vérifie que le rake implicite de chaque grille est égal au `feePct` annoncé. Une faute de frappe dans une fréquence le fait échouer.
 - Ne jamais présenter une grille comme officielle sans source. PokerStars.fr n'a pas de tableau public : on ne l'invente pas. Betclic bloque les robots : ses tableaux viennent de captures fournies par l'utilisateur.

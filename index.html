@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spin Variance Lab</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <div>
+        <h1>Spin Variance Lab</h1>
+        <p class="subtitle">EV &amp; variance des Spin &amp; Go / Expresso / Twister</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="mode-switch" role="radiogroup" aria-label="Mode d'affichage">
+        <button type="button" role="radio" data-mode="simple" title="Les réglages essentiels, valeurs standard pour le reste">Simple</button>
+        <button type="button" role="radio" data-mode="expert" title="Tous les réglages">Expert</button>
+      </div>
+      <button type="button" class="btn ghost adv-only" id="btn-export-all" title="Exporter toute la configuration (grilles, profil, comparatif)">Exporter config</button>
+      <label class="btn ghost file-btn adv-only" title="Importer une configuration exportée">
+        Importer config<input type="file" id="file-import-all" accept=".json,application/json" hidden>
+      </label>
+      <button type="button" class="btn ghost" id="btn-reset" title="Revenir aux réglages par défaut">Réinitialiser</button>
+      <button type="button" class="btn ghost" id="btn-theme" title="Thème">Thème : auto</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- ================= Paramètres ================= -->
+    <aside class="sidebar" aria-label="Paramètres">
+      <section class="panel">
+        <h2>Ma partie</h2>
+        <label class="field">
+          <span class="label">Room / format</span>
+          <select id="room-select"></select>
+        </label>
+        <label class="field">
+          <span class="label">Buy-in</span>
+          <select id="buyin-select"></select>
+        </label>
+        <p class="derived" id="preset-info"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Mon niveau</h2>
+        <div class="field adv-only">
+          <span class="label">Mode cEV</span>
+          <div class="segmented" role="radiogroup">
+            <label><input type="radio" name="cevMode" value="global" data-bind="profile.cevMode"> Global</label>
+            <label><input type="radio" name="cevMode" value="tranches" data-bind="profile.cevMode"> Par tranche de multiplicateur</label>
+          </div>
+        </div>
+        <label class="field">
+          <span class="label" id="lbl-cev">cEV moyen (jetons / partie)</span>
+          <input type="number" step="any" data-bind="profile.cev">
+          <span class="hint simple-only">Ton chipEV par partie, donné par ton tracker. 0 = joueur neutre.</span>
+        </label>
+        <div id="tranches-box" class="subbox adv-only">
+          <p class="hint">Chaque ligne de la grille prend le cEV de la tranche dont le seuil est le plus grand ≤ son multiplicateur.</p>
+          <table class="mini-table">
+            <thead><tr><th>À partir de ×</th><th>cEV</th><th></th></tr></thead>
+            <tbody id="tranches-body"></tbody>
+          </table>
+          <button type="button" class="btn small" id="btn-add-tranche">+ Tranche</button>
+        </div>
+        <label class="field simple-only">
+          <span class="label">Parties sur lesquelles ce cEV a été mesuré</span>
+          <input type="number" min="1" step="1" data-bind="profile.uncertainty.nSample">
+          <span class="hint">Sert à tenir compte de la marge d'erreur de ton cEV.</span>
+        </label>
+        <p class="derived" id="derived-p1"></p>
+
+        <label class="field adv-only">
+          <span class="label">Probabilité de finir 2e (jackpots partagés)</span>
+          <select data-bind="profile.finishModel">
+            <option value="harville">Modèle Harville (déduit du cEV)</option>
+            <option value="manual">Mes stats réelles</option>
+          </select>
+        </label>
+        <label class="field adv-only" id="share2-field">
+          <span class="label">% de mes non-victoires finies 2e</span>
+          <input type="number" step="any" min="0" max="100" data-bind="profile.share2">
+        </label>
+
+        <div class="subbox adv-only">
+          <label class="check"><input type="checkbox" data-bind="profile.uncertainty.enabled"> Intégrer l'incertitude sur mon cEV</label>
+          <div id="unc-fields">
+            <label class="field">
+              <span class="label">Parties ayant servi à mesurer le cEV</span>
+              <input type="number" min="1" step="1" data-bind="profile.uncertainty.nSample">
+            </label>
+            <label class="field">
+              <span class="label">Écart-type des jetons / partie</span>
+              <select data-bind="profile.uncertainty.sdMode">
+                <option value="auto">Auto (résultat final : 3S·√(p(1−p)))</option>
+                <option value="manual">Saisi (ex. cEV all-in ajusté)</option>
+              </select>
+            </label>
+            <label class="field" id="sd-field">
+              <span class="label">Écart-type (jetons)</span>
+              <input type="number" min="0" step="any" data-bind="profile.uncertainty.sd">
+            </label>
+          </div>
+        </div>
+        <p class="derived" id="derived-se"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Rakeback &amp; bonus</h2>
+        <label class="field simple-only">
+          <span class="label">Rakeback (% du rake payé)</span>
+          <input type="number" min="0" step="any" data-bind="rb.pct">
+        </label>
+        <label class="field adv-only">
+          <span class="label">Base de calcul (fee nominale)</span>
+          <select data-bind="rb.feeMode">
+            <option value="grid">% du buy-in défini dans la grille</option>
+            <option value="eur">Montant en € par partie</option>
+          </select>
+        </label>
+        <label class="field adv-only" id="feeEur-field">
+          <span class="label">Fee nominale (€ / partie)</span>
+          <input type="number" min="0" step="any" data-bind="rb.feeEur">
+        </label>
+        <label class="field adv-only">
+          <span class="label">Type de rakeback</span>
+          <select data-bind="rb.mode">
+            <option value="none">Aucun</option>
+            <option value="pct">% de la fee</option>
+            <option value="fixed">Montant fixe / partie</option>
+            <option value="tiers">Paliers selon le volume mensuel</option>
+          </select>
+        </label>
+        <label class="field adv-only" id="rbPct-field">
+          <span class="label">Rakeback (% de la fee)</span>
+          <input type="number" min="0" step="any" data-bind="rb.pct">
+        </label>
+        <label class="field adv-only" id="rbFixed-field">
+          <span class="label">Rakeback (€ / partie)</span>
+          <input type="number" min="0" step="any" data-bind="rb.fixedEur">
+        </label>
+        <div id="tiers-box" class="subbox adv-only">
+          <table class="mini-table">
+            <thead><tr><th>Dès (parties / mois)</th><th>% fee</th><th></th></tr></thead>
+            <tbody id="tiers-body"></tbody>
+          </table>
+          <button type="button" class="btn small" id="btn-add-tier">+ Palier</button>
+          <label class="field">
+            <span class="label">Mon volume mensuel (parties)</span>
+            <input type="number" min="0" step="1" data-bind="rb.monthlyVolume">
+          </label>
+        </div>
+        <label class="field adv-only">
+          <span class="label">Bonus / leaderboards (€ / partie)</span>
+          <input type="number" step="any" data-bind="rb.extraEur">
+        </label>
+        <p class="derived" id="derived-rb"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Volume &amp; bankroll</h2>
+        <div class="grid-2">
+          <label class="field">
+            <span class="label">Parties prévues</span>
+            <input type="number" min="1" step="1" data-bind="sim.games">
+          </label>
+          <label class="field">
+            <span class="label">Bankroll (€)</span>
+            <input type="number" min="0" step="any" data-bind="sim.bankroll">
+          </label>
+          <label class="field">
+            <span class="label">Parties / heure</span>
+            <input type="number" min="0" step="any" data-bind="sim.gamesPerHour">
+          </label>
+          <label class="field adv-only">
+            <span class="label">Nombre de simulations</span>
+            <input type="number" min="1" step="1" data-bind="sim.sims">
+          </label>
+          <label class="field adv-only">
+            <span class="label">Seuil « jackpot » (×)</span>
+            <input type="number" min="0" step="any" data-bind="sim.jackpotMult">
+          </label>
+          <label class="field adv-only">
+            <span class="label">Trajectoires affichées</span>
+            <input type="number" min="0" max="200" step="1" data-bind="sim.paths">
+          </label>
+          <label class="field adv-only">
+            <span class="label">Points par courbe</span>
+            <input type="number" min="10" max="1000" step="1" data-bind="sim.checkpoints">
+          </label>
+          <label class="field adv-only">
+            <span class="label">Graine (vide = aléatoire)</span>
+            <input type="text" inputmode="numeric" data-bind="sim.seed" placeholder="aléatoire">
+          </label>
+        </div>
+        <label class="check adv-only"><input type="checkbox" data-bind="sim.smoothJackpots"> Lisser les jackpots (EV gardée, variance du jackpot retirée)</label>
+      </section>
+    </aside>
+
+    <!-- ================= Contenu ================= -->
+    <main class="content">
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="analysis">Mon EV</button>
+        <button type="button" role="tab" data-tab="sim">Variance &amp; bankroll</button>
+        <button type="button" role="tab" data-tab="grid">Grille</button>
+        <button type="button" role="tab" data-tab="compare">Comparatif</button>
+        <button type="button" role="tab" data-tab="luck" class="adv-only">Analyse de chance</button>
+        <button type="button" role="tab" data-tab="method">Méthode</button>
+      </nav>
+      <div id="global-errors" class="alert error" hidden></div>
+
+      <!-- ---------- Grille ---------- -->
+      <section class="tab-panel" data-panel="grid" hidden>
+        <div class="card">
+          <div class="toolbar">
+            <button type="button" class="btn" id="btn-save-preset">Enregistrer dans « Mes grilles »</button>
+            <button type="button" class="btn ghost" id="btn-delete-preset">Supprimer cette grille perso</button>
+            <span class="spacer"></span>
+            <button type="button" class="btn ghost adv-only" id="btn-export-grid">Exporter la grille</button>
+            <label class="btn ghost file-btn adv-only">Importer une grille<input type="file" id="file-import-grid" accept=".json,.csv,text/csv,application/json" hidden></label>
+            <button type="button" class="btn ghost adv-only" id="btn-paste-csv">Coller un CSV</button>
+          </div>
+          <div class="grid-4">
+            <label class="field"><span class="label">Nom de la grille</span><input type="text" data-bind="grid.name"></label>
+            <label class="field"><span class="label">Buy-in total (€, fee comprise)</span><input type="number" min="0" step="any" data-bind="grid.buyIn"></label>
+            <label class="field"><span class="label">Tapis de départ (jetons)</span><input type="number" min="1" step="1" data-bind="grid.stack"></label>
+            <label class="field"><span class="label">Fee nominale (% du buy-in)</span><input type="number" min="0" step="any" data-bind="grid.feePct"></label>
+          </div>
+          <div id="csv-box" class="subbox" hidden>
+            <p class="hint">Une ligne par multiplicateur : <code>multiplicateur;fréquence;%1er;%2e;%3e;prix_fixe_€</code> (séparateur <code>;</code> <code>,</code> ou tabulation, les 3 dernières colonnes sont optionnelles). Exemple : <code>2;750000;100</code></p>
+            <textarea id="csv-text" rows="7" spellcheck="false"></textarea>
+            <div class="row-actions">
+              <button type="button" class="btn" id="btn-apply-csv">Remplacer la grille</button>
+              <button type="button" class="btn ghost" id="btn-cancel-csv">Annuler</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="kpis" id="grid-kpis"></div>
+        <div id="grid-warnings"></div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Multiplicateurs</h3>
+            <div class="row-actions">
+              <button type="button" class="btn small" id="btn-add-row">+ Ligne</button>
+              <button type="button" class="btn small ghost" id="btn-sort-rows">Trier par multiplicateur</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table grid-table">
+              <thead>
+                <tr>
+                  <th>×</th>
+                  <th title="Prize pool fixe en €, prioritaire sur le multiplicateur">Prix fixe €</th>
+                  <th title="Fréquence relative (ex. occurrences sur 1 000 000)">Fréquence</th>
+                  <th>Proba</th>
+                  <th>1 sur</th>
+                  <th>Prize pool</th>
+                  <th>1er %</th>
+                  <th>2e %</th>
+                  <th>3e %</th>
+                  <th>Σ</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="grid-body"></tbody>
+            </table>
+          </div>
+          <p class="hint">Le rake réel d'un format jackpot est caché dans la grille : <b>rake = 1 − E[multiplicateur] / 3</b>. La fee nominale ne sert qu'au calcul du rakeback ; si les deux divergent fortement, vérifie la grille.</p>
+        </div>
+      </section>
+
+      <!-- ---------- Analyse ---------- -->
+      <section class="tab-panel" data-panel="analysis" hidden>
+        <div class="kpis" id="analysis-kpis"></div>
+        <div class="card">
+          <h3>Contribution de chaque multiplicateur</h3>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>×</th><th>Prize pool</th><th>Proba</th><th>1 sur</th><th class="adv-only">cEV appliqué</th>
+                  <th>P(1er)</th><th class="adv-only">P(2e)</th><th class="adv-only">P(3e)</th>
+                  <th>Part des gains</th><th class="adv-only">Fréq. attendue sur N</th><th>P(≥ 1 sur N)</th>
+                </tr>
+              </thead>
+              <tbody id="analysis-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="hint adv-only">L'écart-type « loi normale » est donné à titre indicatif : avec des jackpots rares la distribution est très asymétrique et seule la simulation donne des intervalles fiables.</p>
+      </section>
+
+      <!-- ---------- Simulation ---------- -->
+      <section class="tab-panel" data-panel="sim" hidden>
+        <div class="card">
+          <div class="toolbar">
+            <button type="button" class="btn primary" id="btn-run">Lancer la simulation</button>
+            <button type="button" class="btn ghost" id="btn-cancel" disabled>Annuler</button>
+            <div class="progress" aria-hidden="true"><div class="progress-bar" id="progress-bar"></div></div>
+            <span class="muted" id="sim-status">Prêt.</span>
+          </div>
+          <p class="muted small" id="sim-cost"></p>
+        </div>
+        <div id="sim-stale" class="alert warn" hidden>Les paramètres ont changé depuis cette simulation : relance-la pour mettre les résultats à jour.</div>
+        <div id="sim-results" hidden>
+          <div class="kpis" id="sim-kpis"></div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Trajectoires de gains</h3>
+              <div class="legend">
+                <span><i class="sw median"></i>Médiane</span>
+                <span><i class="sw band-inner"></i>25–75 %</span>
+                <span><i class="sw band-outer"></i>5–95 %</span>
+                <span><i class="sw ev"></i>EV théorique</span>
+                <span><i class="sw mean"></i>Moyenne simulée</span>
+                <span><i class="sw path"></i>Trajectoires</span>
+              </div>
+            </div>
+            <div id="chart-bands" data-height="360"></div>
+          </div>
+          <div class="cards-2">
+            <div class="card">
+              <h3>Résultat final</h3>
+              <div id="chart-finals" data-height="260"></div>
+            </div>
+            <div class="card">
+              <h3>Pire downswing (par trajectoire)</h3>
+              <div id="chart-dd" data-height="260"></div>
+            </div>
+          </div>
+          <div class="cards-2">
+            <div class="card">
+              <h3>Risque de ruine selon la bankroll</h3>
+              <div id="chart-ror" data-height="260"></div>
+            </div>
+            <div class="card adv-only">
+              <h3>Percentiles</h3>
+              <div class="table-wrap"><table class="data-table" id="sim-percentiles"></table></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="toolbar">
+              <label class="field inline grow"><span class="label">Nom du scénario</span><input type="text" id="scenario-name" placeholder="ex. Expresso 5 € – cEV +25"></label>
+              <button type="button" class="btn" id="btn-add-scenario">Ajouter au comparatif</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- Comparatif ---------- -->
+      <section class="tab-panel" data-panel="compare" hidden>
+        <div class="card">
+          <div class="card-head">
+            <h3>Scénarios enregistrés</h3>
+            <div class="row-actions">
+              <button type="button" class="btn small ghost" id="btn-export-compare">Exporter CSV</button>
+              <button type="button" class="btn small ghost" id="btn-clear-compare">Tout effacer</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table class="data-table" id="compare-table"></table></div>
+          <p class="hint" id="compare-empty">Lance une simulation puis « Ajouter au comparatif » pour comparer des rooms, des buy-ins ou des cEV.</p>
+        </div>
+      </section>
+
+      <!-- ---------- Chance ---------- -->
+      <section class="tab-panel" data-panel="luck" hidden>
+        <div class="card">
+          <h3>Mes résultats réels</h3>
+          <p class="hint">Saisis le nombre de parties jouées à chaque multiplicateur et ton résultat net <b>hors rakeback</b>. Le cEV utilisé est celui du profil (mets ton cEV réel sur ce volume).</p>
+          <div class="grid-4">
+            <label class="field"><span class="label">Résultat net réel (€, hors RB)</span><input type="number" step="any" data-bind="luck.actualNet"></label>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>×</th><th>Prize pool</th><th>Parties jouées</th><th>Attendu</th><th>Écart</th><th>Probabilité d'un tel écart</th><th>Chance (€)</th></tr></thead>
+              <tbody id="luck-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="kpis" id="luck-kpis"></div>
+      </section>
+
+      <!-- ---------- Méthode ---------- -->
+      <section class="tab-panel prose" data-panel="method" hidden>
+        <div class="card">
+          <h3>Modes</h3>
+          <ul>
+            <li><b>Simple</b> : tu choisis la room, le buy-in, ton cEV, ton rakeback, ton volume et ta bankroll. Le reste prend des valeurs standard (cEV identique sur tous les multiplicateurs, 2e place par le modèle Harville, incertitude du cEV activée, 2 000 simulations, seuil jackpot ×100). Les réglages experts que tu as faits sont conservés mais ignorés.</li>
+            <li><b>Expert</b> : tous les réglages, l'analyse de chance et l'édition fine des grilles.</li>
+          </ul>
+          <h3>Grilles officielles</h3>
+          <ul>
+            <li>Winamax Expresso, Unibet Power Spin, PMU Twister et Betclic Twister : recopiées des pages officielles le 03/11/2026. Le rake implicite de chaque grille correspond exactement au rake annoncé par la room (7 % en général, 8 % sur les Expresso 0,25 € et 0,50 €, 6,9 % sur le Power Spin 250 €), ce qui valide la saisie.</li>
+            <li>PMU Twister 0,25 € : le tableau publié par PMU totalise 99 % ; les fréquences sont renormalisées.</li>
+            <li>Betclic Twister : une même grille pour tous les buy-ins de 0,20 € à 100 €, une autre pour 200 €. Le tapis de départ n'est pas indiqué : 500 jetons par défaut, à vérifier.</li>
+            <li>PokerStars.fr ne publie pas de tableau accessible : saisis-le depuis le client de jeu (onglet Grille, puis « Enregistrer dans Mes grilles »).</li>
+            <li>Les rooms modifient leurs grilles et lancent des promos (jackpots boostés) : en cas de doute, revérifie sur la page source indiquée sous le buy-in.</li>
+          </ul>
+          <h3>Modèle</h3>
+          <ol>
+            <li><b>Multiplicateur</b> : tiré selon la grille, p<sub>i</sub> = fréquence<sub>i</sub> / Σ fréquences. Prize pool = m<sub>i</sub> × buy-in (ou le prix fixe saisi).</li>
+            <li><b>Rake réel</b> : 1 − E[m] / 3. C'est le coût moyen du format, jackpots compris. La fee nominale (ou le montant € saisi) n'est utilisée que comme base du rakeback.</li>
+            <li><b>Rake effectif</b> : 1 − E[m | m &lt; seuil jackpot] / 3. C'est ce que tu paies réellement tant que tu ne touches pas de jackpot : la différence avec le rake réel finance les gros multiplicateurs. « Net de rakeback » = rake effectif − rakeback, en % du buy-in.</li>
+            <li><b>P(1er)</b> par conservation des jetons : E[tapis final] = 3S · P(1er) = S + cEV, donc P(1er) = (S + cEV) / 3S. Exact quel que soit le style de jeu.</li>
+            <li><b>P(2e), P(3e)</b> : le cEV ne les détermine pas (une équation, deux inconnues). Deux options : modèle de Malmuth-Harville sur les parts de jetons espérées (P(2e) = 2x(1−x)/(1+x) avec x = P(1er)), ou ta répartition réelle. N'influe que sur les multiplicateurs qui paient le 2e/3e.</li>
+            <li><b>cEV par tranche</b> : ton edge n'est pas le même sur un ×2 et sur un gros multiplicateur ; or l'EV vient en grande partie des gros multiplicateurs.</li>
+            <li><b>Profit d'une partie</b> = prix(place) − buy-in + rakeback + bonus. EV = Σ<sub>i</sub> p<sub>i</sub> Σ<sub>k</sub> P<sub>k</sub> · profit<sub>i,k</sub>.</li>
+            <li><b>Incertitude sur le cEV</b> : ton cEV est une estimation, erreur standard = σ<sub>jetons</sub> / √n. Chaque trajectoire tire son propre « vrai » cEV ~ N(cEV, erreur²). Sans ça, la variance et le risque de ruine sont sous-estimés.</li>
+          </ol>
+          <h3>Simulation</h3>
+          <ul>
+            <li>Monte Carlo : tirage du multiplicateur (méthode alias, O(1)) puis de la place, pour chaque partie de chaque trajectoire, répartis sur tous les cœurs du processeur.</li>
+            <li><b>Downswing</b> = plus grande baisse depuis un plus haut. <b>Breakeven stretch</b> = plus longue série de parties sans nouveau plus haut.</li>
+            <li><b>Ruine</b> : la bankroll ne permet plus de payer un buy-in (bankroll + pire cumul &lt; buy-in). Pas de changement de limite pendant la trajectoire.</li>
+            <li><b>Jackpots rares</b> : la moyenne simulée converge mal vers l'EV quand un lot à 1 / 10<sup>7</sup> pèse lourd. Compare toujours moyenne simulée et EV théorique (exacte, calculée analytiquement), et regarde le ROI « hors jackpots » : c'est ce que tu gagnes réellement tant que tu n'en touches pas. L'option « lisser les jackpots » ne tire plus jamais de jackpot et ajoute à chaque partie la part d'EV qu'ils représentent : même EV, mais la variance que tu vis réellement tant qu'aucun jackpot ne tombe.</li>
+          </ul>
+          <h3>Analyse de chance</h3>
+          <ul>
+            <li><b>Chance multiplicateurs</b> = EV sachant les multiplicateurs réellement tirés − EV théorique sur le même volume.</li>
+            <li><b>Chance places</b> = résultat réel − EV sachant les multiplicateurs tirés (all-in, cartes, places).</li>
+            <li>Par ligne : probabilité binomiale d'observer un écart au moins aussi grand que le tien.</li>
+          </ul>
+          <h3>Limites</h3>
+          <ul>
+            <li>Format à 3 joueurs uniquement.</li>
+            <li>Rakeback modélisé comme un montant constant par partie (le palier est déterminé par ton volume mensuel moyen).</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/model.js"></script>
+  <script src="js/presets.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

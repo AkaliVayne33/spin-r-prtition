@@ -1,0 +1,9 @@
+# Depot PUBLIC : aucun secret ici
+.env
+.env.*
+*.key
+*.pem
+.claude/
+node_modules/
+__pycache__/
+*.log

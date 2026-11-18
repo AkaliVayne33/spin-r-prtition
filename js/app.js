@@ -46,7 +46,10 @@
     }
     return fmtNum(x * 100, d) + ' %';
   }
-  function fmtSignedPct(x, d) { return isFinite(x) && x > 0 ? '+' + fmtPct(x, d) : fmtPct(x, d); }
+  function fmtSignedPct(x, d) {
+    if (typeof x !== 'number') return '—'; /* null : valeur absente (NaN devenu null après sauvegarde) */
+    return isFinite(x) && x > 0 ? '+' + fmtPct(x, d) : fmtPct(x, d);
+  }
   function fmtInt(v) { return isFinite(v) ? Math.round(v).toLocaleString('fr-FR') : '—'; }
   function fmtOneIn(p) { return p > 0 ? '1 / ' + fmtInt(1 / p) : '—'; }
   function fmtMult(m) { return '×' + fmtNum(m, m % 1 === 0 ? 0 : 2); }
@@ -99,7 +102,8 @@
   }
 
   function gridFromPreset(p) {
-    return { name: p.name, buyIn: p.buyIn, stack: p.stack, feePct: p.feePct, rows: clone(p.rows) };
+    /* checked : date du relevé officiel copié, pour savoir si presets.js a changé depuis */
+    return { name: p.name, buyIn: p.buyIn, stack: p.stack, feePct: p.feePct, rows: clone(p.rows), checked: p.checked || '' };
   }
 
   function allPresets() { return SPIN_PRESETS.concat(state.userPresets || []); }
@@ -118,6 +122,14 @@
     }
     if (!state.grid || !Array.isArray(state.grid.rows)) {
       state.grid = gridFromPreset(findPreset(state.presetId) || defaultPreset());
+    }
+    /* grille officielle mise à jour depuis la dernière visite (nouveau relevé dans presets.js) :
+       on recharge la nouvelle version au lieu de calculer avec l'ancienne copie gardée dans le navigateur */
+    var p = findPreset(state.presetId);
+    if (p && p.builtin && p.checked) {
+      /* copie d'avant ce marquage : datée si elle est identique à l'officielle, sinon (modifiée) laissée telle quelle */
+      if (!state.grid.checked && gridMatchesPreset(p)) state.grid.checked = p.checked;
+      else if (state.grid.checked && state.grid.checked !== p.checked) state.grid = gridFromPreset(p);
     }
   }
 
@@ -797,7 +809,7 @@
     return s.replace('.', ',');
   }
 
-  function csvText(v) { return '"' + String(v).replace(/"/g, '""') + '"'; }
+  function csvText(v) { return v == null ? '' : '"' + String(v).replace(/"/g, '""') + '"'; }
 
   function exportCompareCsv() {
     var head = COMPARE_COLS.map(function (c) { return c[1] + (COMPARE_FRACTION_KEYS[c[0]] || c[0] === 'rake' ? ' (%)' : ''); });
@@ -1074,9 +1086,9 @@
     if (!rows.length) { alert('Aucune ligne reconnue dans ' + filename + '.'); return; }
     state.grid = {
       name: meta.name != null && meta.name !== '' ? String(meta.name) : filename.replace(/\.[^.]+$/, ''),
-      buyIn: meta.buyIn != null ? meta.buyIn : state.grid.buyIn,
-      stack: meta.stack != null ? meta.stack : state.grid.stack,
-      feePct: meta.feePct != null ? meta.feePct : state.grid.feePct,
+      buyIn: jsonNumber(meta.buyIn, state.grid.buyIn),
+      stack: jsonNumber(meta.stack, state.grid.stack, true),
+      feePct: jsonNumber(meta.feePct, state.grid.feePct),
       rows: rows.map(function (r) {
         return {
           mult: jsonNumber(r.mult, 0, true), prize: jsonNumber(r.prize, 0, true), weight: jsonNumber(r.weight, 0, true),
@@ -1168,6 +1180,8 @@
         var rows = parseCsv($('csv-text').value);
         if (!rows.length) { alert('Aucune ligne reconnue.'); break; }
         state.grid.rows = rows;
+        state.grid.name = 'Grille collée';
+        state.grid.checked = '';
         state.presetId = null;
         state.luck.counts = {};
         $('csv-box').hidden = true;
@@ -1198,6 +1212,11 @@
 
   function init() {
     loadState();
+    /* date du relevé des grilles officielles : une seule source, presets.js (CHECKED) */
+    var official = SPIN_PRESETS.filter(function (p) { return p.builtin && p.checked; })[0];
+    Array.prototype.forEach.call(document.querySelectorAll('.grid-checked-date'), function (el) {
+      if (official) el.textContent = official.checked.split('-').reverse().join('/');
+    });
     applyTheme();
     /* 'input' est aussi émis par les cases à cocher, radios et selects */
     document.addEventListener('input', onBoundInput);

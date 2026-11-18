@@ -6,7 +6,7 @@ Outil local pour calculer l'EV et simuler la variance des formats jackpot à 3 j
 
 ## Grilles intégrées
 
-Ces grilles ont été recopiées des pages officielles le 03/11/2026. Le rake implicite de chacune est identique au rake annoncé par la room, ce qui confirme que la saisie est juste (un test automatique le vérifie).
+Ces grilles ont été recopiées des pages officielles (date du relevé : `CHECKED` dans `js/presets.js`, affichée dans l'outil). Le rake implicite de chacune est identique au rake annoncé par la room, ce qui confirme que la saisie est juste (un test automatique le vérifie).
 
 | Room | Buy-ins | Source |
 |---|---|---|
